@@ -42,10 +42,9 @@ def run_game(title="untitled"):
     def update_points_info():
         total = len(canvas.points)
         cluster_labels.clear()
-        points_info_label.set_text(f"Points: {total}")
+        points_info_label.text = (f"Points: {total}")
         if hasattr(canvas, "_labels") and hasattr(canvas, "centroids"):
             from collections import Counter
-            import pygame
             counts = Counter(canvas._labels)
             k = len(canvas.centroids)
             cluster_colors = []

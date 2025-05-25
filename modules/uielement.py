@@ -14,20 +14,35 @@ class Signal:
             "dragged": []
         }
 
-    def connect(self, event, callback):
-        if event in self._events:
-            self._events[event].append(callback)
+    def connect(self, event: str, callback: callable) -> None:
+            """Connect a callback to an event with type checking."""
+            if not isinstance(event, str):
+                raise ValueError("Event must be a string")
+            if not callable(callback):
+                raise ValueError("Callback must be callable")
+                
+            if event in self._events:
+                self._events[event].append(callback)
+            else:
+                raise KeyError(f"Unknown event type: {event}")
 
-    def emit(self, *args, **kwargs):
-        for event, callbacks in self._events.items():
-            if event in kwargs:
-                for callback in callbacks:
-                    callback(*args, **kwargs[event])
+    def emit(self, *args, **kwargs) -> None:
+            """Emit events with error handling."""
+            for event, callbacks in self._events.items():
+                if event in kwargs:
+                    for callback in callbacks:
+                        try:
+                            callback(*args, **kwargs[event])
+                        except Exception as e:
+                            show_msg(LEVEL["ERROR"], f"Error in {event} callback: {str(e)}")
 
-    def disconnect(self, event, callback):
+    def disconnect(self, event: str, callback: callable) -> None:
+        """Disconnect a callback from an event."""
         if event in self._events:
-            if callback in self._events[event]:
+            try:
                 self._events[event].remove(callback)
+            except ValueError:
+                show_msg(LEVEL["WARNING"], f"Callback not found for event {event}")
 
 # ======= Focus Manager =======
 class FocusManager:
@@ -43,6 +58,9 @@ class FocusManager:
     def clear_focus(self):
         if self._focused:
             self._focused.clear_focus()
+            if hasattr(self._focused, '_active'):
+                self._focused._active = False
+                self._focused._update_color_state()
         self._focused = None
 
     def get_focused(self):
@@ -55,34 +73,43 @@ class UIElement(ABC):
     """
     Abstract base class for UI elements in a pygame application.
     Provides basic functionality for positioning, coloring, and event handling.
+    Enhanced with better visual feedback for interactions.
     """
     def __init__(self, position: Tuple[int, int] = (0, 0),
                  color: Tuple[int, int, int] = COLOR["light_blue"],
                  hover_color: Tuple[int, int, int] = COLOR["deep_sky_blue"],
+                 active_color: Tuple[int, int, int] = COLOR["dodger_blue"],
                  disabled_color: Tuple[int, int, int] = COLOR["dim_gray"]):
         self.position = position
         # colors
+        self._original_color = color
         self.color = color
         self.hover_color = hover_color
+        self.active_color = active_color
         self.disabled_color = disabled_color
-        self._original_color = color
         # placeholder
         self._rect = pygame.Rect(0, 0, 0, 0)
         # flags
         self._enabled = True
         self._focused = False
         self._hovered = False
+        self._active = False
         # signal
         self.signal = Signal()
 
     @property
-    def enabled(self) -> None:
+    def enabled(self) -> bool:
         return self._enabled
     
     @enabled.setter
     def enabled(self, flag: bool) -> None:
         self._enabled = flag
-        self.color = self._original_color if flag else self.disabled_color
+        if flag:
+            self.color = self._original_color
+            self._active = False
+        else:
+            self.color = self.disabled_color
+            self._active = False
         if not flag:
             self.signal.emit(disabled=[])
             show_msg(LEVEL["WARNING"], "UIElement is disabled.")
@@ -126,22 +153,27 @@ class UIElement(ABC):
         self.position = position
         return self
 
-    def update(self, mouse_pos) -> None:
-        """Update the UI element's state."""
+    def _update_color_state(self) -> None:
+        """Update the element's color based on its current state."""
         if not self._enabled:
             self.color = self.disabled_color
-            self._after_color_update(mouse_pos)
             return
-
-        is_hovering = self._rect.collidepoint(mouse_pos)
-        if is_hovering and not self._hovered:
+            
+        if self._active:
+            self.color = self.active_color
+        elif self._hovered:
             self.color = self.hover_color
-            self._hovered = True
-            self.signal.emit(hovered={})
-            self._after_color_update(mouse_pos)
-        elif not is_hovering and self._hovered:
+        else:
             self.color = self._original_color
-            self._hovered = False
+
+    def update(self, mouse_pos) -> None:
+        """Update the UI element's state."""
+        prev_hovered = self._hovered
+        self._hovered = self._rect.collidepoint(mouse_pos) if self._enabled else False        
+        if self._hovered != prev_hovered:
+            if self._hovered:
+                self.signal.emit(hovered={})
+            self._update_color_state()
             self._after_color_update(mouse_pos)
 
     def _after_color_update(self, mouse_pos) -> None:
@@ -186,13 +218,27 @@ class UIElement(ABC):
     def execute(self, event: pygame.event.Event, mouse_pos: tuple[int, int]) -> None:
         if not self._enabled:
             return
-
+        prev_hovered = self._hovered
         self._hovered = self._rect.collidepoint(mouse_pos)
-
+        if self._hovered != prev_hovered:
+            if self._hovered:
+                self.signal.emit(hovered={})
+            self._update_color_state()
+            self._after_color_update(mouse_pos)
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self._hovered:
                 focus_manager.set_focus(self)
+                self._active = True
+                self._update_color_state()
                 self.signal.emit(clicked={})
-            else:
-                if self._focused:
-                    focus_manager.clear_focus()
+            elif self._focused:
+                focus_manager.clear_focus()        
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            if self._active:
+                self._active = False
+                self._update_color_state()
+                if self._hovered:
+                    self.signal.emit(clicked_release={})        
+        if not self._focused and self._active:
+            self._active = False
+            self._update_color_state()
