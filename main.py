@@ -23,15 +23,17 @@ def run_game(title="untitled"):
     pygame.display.set_caption(title)
     clock = pygame.time.Clock()
 
-    button = Button((620, 20), (150, 50), COLOR["primary"], Text("Run", 20, (0, 0), COLOR["black"]))
+    run_button = Button((620, 20), (150, 50), COLOR["primary"], Text("Run", 20, (0, 0), COLOR["black"]))
     boundary_button = Button((620, 80), (150, 50), COLOR["steel_blue"], Text("Draw Boundary", 20, (0, 0), COLOR["black"]))
     remove_button = Button((620, 150), (150, 50), COLOR["warning"], Text("Remove Last Point", 20, (0, 0), COLOR["black"]))
     clear_button = Button((620, 210), (150, 50), COLOR["secondary"], Text("Clear Canvas", 20, (0, 0), COLOR["black"]))
+    k_inc_button = Button((730, 275), (40, 40), COLOR["add"], Text("+", 30, (0, 0)))
+    k_dec_button = Button((620, 275), (40, 40), COLOR["warning"], Text("-", 30, (0, 0)))
+
+    buttons = [run_button, boundary_button, remove_button, clear_button, k_inc_button, k_dec_button]
 
     k = 3
     k_label = Label(f"k = {k}", 24, (670, 280))
-    k_inc_button = Button((730, 275), (40, 40), COLOR["add"], Text("+", 30, (0, 0)))
-    k_dec_button = Button((620, 275), (40, 40), COLOR["warning"], Text("-", 30, (0, 0)))
 
     points_info_label = Label("Points: 0", 20, (620, 340))
     cluster_labels = []
@@ -39,33 +41,36 @@ def run_game(title="untitled"):
     canvas = Canvas((0, 0), (600, 600), COLOR["white"])
     show_boundary = False
 
-    def update_points_info():
-        total = len(canvas.points)
+    def update_cluster_labels():
         cluster_labels.clear()
-        points_info_label.text = (f"Points: {total}")
         if hasattr(canvas, "_labels") and hasattr(canvas, "centroids"):
             from collections import Counter
             counts = Counter(canvas._labels)
-            k = len(canvas.centroids)
+            k_clusters = len(canvas.centroids)
             cluster_colors = []
-            for i in range(k):
+            for i in range(k_clusters):
                 for idx, label in enumerate(canvas._labels):
                     if label == i:
                         cluster_colors.append(canvas.points[idx][2])
                         break
                 else:
                     cluster_colors.append((0, 0, 0))
-            for i in range(k):
+            for i in range(k_clusters):
                 color = cluster_colors[i]
                 cx, cy = canvas.centroids[i]
                 text = f"C{i+1}: {counts[i]} point(s) - Centroid: ({int(cx)}, {int(cy)})"
                 label = Label(text, 20, (620, 360 + i * 24), color=color)
                 cluster_labels.append(label)
 
+    def update_points_info():
+        total = len(canvas.points)
+        points_info_label.text = (f"Points: {total}")
+        update_cluster_labels()
+
     def run_kmeans_on_canvas():
         canvas.run_kmeans(k=k)
         update_points_info()
-    button.connect("clicked", run_kmeans_on_canvas)
+    run_button.connect("clicked", run_kmeans_on_canvas)
     remove_button.connect("clicked", canvas.remove_last_point)
     clear_button.connect("clicked", canvas.clear_canvas)
 
@@ -73,13 +78,13 @@ def run_game(title="untitled"):
         nonlocal k
         if k < 10:
             k += 1
-            k_label.set_text(f"k = {k}")
+            k_label.text = f"k = {k}"
 
     def decrease_k():
         nonlocal k
         if k > 1:
             k -= 1
-            k_label.set_text(f"k = {k}")
+            k_label.text = f"k = {k}"
 
     k_inc_button.connect("clicked", increase_k)
     k_dec_button.connect("clicked", decrease_k)
@@ -95,36 +100,25 @@ def run_game(title="untitled"):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            button.execute(event, pygame.mouse.get_pos())
-            boundary_button.execute(event, pygame.mouse.get_pos())
-            remove_button.execute(event, pygame.mouse.get_pos())
-            clear_button.execute(event, pygame.mouse.get_pos())
-            k_inc_button.execute(event, pygame.mouse.get_pos())
-            k_dec_button.execute(event, pygame.mouse.get_pos())
+
+            for btn in buttons:
+                btn.execute(event, pygame.mouse.get_pos())
             if event.type == pygame.MOUSEBUTTONDOWN:
                 canvas.add_point(event.pos)
                 update_points_info()
             mouse_pos = pygame.mouse.get_pos()
             canvas.hovered_point_index = canvas.get_point_near(mouse_pos)
-
         screen.fill(COLOR["background"])
 
-        button.draw(screen)
-        boundary_button.draw(screen)
-        remove_button.draw(screen)
-        clear_button.draw(screen)
+        for btn in buttons:
+            btn.draw(screen)
         k_label.draw(screen)
-        k_inc_button.draw(screen)
-        k_dec_button.draw(screen)
         points_info_label.draw(screen)
         for label in cluster_labels:
             label.draw(screen)
-        button.update(pygame.mouse.get_pos())
-        boundary_button.update(pygame.mouse.get_pos())
-        remove_button.update(pygame.mouse.get_pos())
-        clear_button.update(pygame.mouse.get_pos())
-        k_inc_button.update(pygame.mouse.get_pos())
-        k_dec_button.update(pygame.mouse.get_pos())
+
+        for btn in buttons:
+            btn.update(pygame.mouse.get_pos())
         
         canvas.draw(screen)
         canvas.update(pygame.mouse.get_pos())
