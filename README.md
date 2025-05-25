@@ -18,7 +18,8 @@ A simple interactive GUI application for visualizing and experimenting with the 
    (On macOS/Linux: `source venv/bin/activate`)
 2. Install dependencies:
    ```bash
-   pip install pygame scikit-learn
+   pip install pygame
+   pip install -U scikit-learn
    ```
 3. Run the application:
    ```bash
